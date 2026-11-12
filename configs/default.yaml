@@ -1,0 +1,10 @@
+data:
+  category: Video_Games
+split:
+  val_fraction: 0.10      # share of interactions (by time) used for validation
+  test_fraction: 0.10     # share of interactions (by time) used for test
+eval:
+  k_values: [10, 20, 100]
+baselines:
+  recent_window_days: 90
+  item_cf_neighbors: 50

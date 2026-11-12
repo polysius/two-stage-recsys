@@ -1,0 +1,24 @@
+[project]
+name = "two-stage-recsys"
+version = "0.1.0"
+description = "Two-stage recommender: candidate generation, LambdaMART ranking, A/B analysis, serving"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy", "pandas", "scipy", "statsmodels", "scikit-learn", "pyarrow", "pyyaml",
+    "torch", "implicit", "faiss-cpu", "lightgbm",
+    "fastapi", "uvicorn", "httpx", "redis",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff", "fakeredis"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests", "scripts"]
