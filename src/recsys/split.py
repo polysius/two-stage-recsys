@@ -56,6 +56,9 @@ def time_split(table: pd.DataFrame, val_fraction: float, test_fraction: float) -
 
 def assert_no_time_leakage(split: Split) -> None:
     """Raise if any split contains an interaction earlier than the previous split's latest."""
+    for name, part in (("train", split.train), ("val", split.val), ("test", split.test)):
+        if part.empty:
+            raise AssertionError(f"{name} split is empty, so ordering cannot be checked")
     if split.train["timestamp"].max() > split.val["timestamp"].min():
         raise AssertionError("validation contains interactions older than the end of train")
     if split.val["timestamp"].max() > split.test["timestamp"].min():
