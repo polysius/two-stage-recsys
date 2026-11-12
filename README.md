@@ -28,7 +28,8 @@ make test
 make baselines DATA_DIR=~/recsys-data
 ```
 
-`make data` downloads the ratings file and writes its SHA-256 next to it. Data is not committed.
+`make data` downloads the ratings file, checks it against the pinned SHA-256 (deleting the file on a
+mismatch) and writes the checksum next to it. Data is not committed.
 
 ## Layout
 
