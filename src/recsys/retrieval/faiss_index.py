@@ -15,9 +15,10 @@ class EmbeddingRetriever:
 
     def __init__(self, user_vectors: np.ndarray, item_vectors: np.ndarray):
         self.user_vectors = np.ascontiguousarray(user_vectors, dtype=np.float32)
+        self.item_vectors = np.ascontiguousarray(item_vectors, dtype=np.float32)
         self.n_items = len(item_vectors)
         self.index = faiss.IndexFlatIP(item_vectors.shape[1])
-        self.index.add(np.ascontiguousarray(item_vectors, dtype=np.float32))
+        self.index.add(self.item_vectors)
 
     def recommend(self, users: np.ndarray, k: int, seen: sp.csr_matrix) -> np.ndarray:
         """Top-k items per user, skipping items in `seen`.
@@ -38,3 +39,7 @@ class EmbeddingRetriever:
                 raise ValueError(f"user {users[row]} has fewer than {k} unseen items")
             recommended[row] = kept
         return recommended
+
+    def score_pairs(self, users: np.ndarray, items: np.ndarray) -> np.ndarray:
+        """Inner product for each (user, item) pair, used as a ranking feature."""
+        return np.einsum("ij,ij->i", self.user_vectors[users], self.item_vectors[items])

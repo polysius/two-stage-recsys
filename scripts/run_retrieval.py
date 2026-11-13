@@ -10,24 +10,10 @@ from pathlib import Path
 import pandas as pd
 import yaml
 
-from recsys.baselines import ItemItemCF, PopularityRecommender, RecentPopularityRecommender
 from recsys.data import load_interactions
 from recsys.evaluation import score_recommender
-from recsys.retrieval.als import ALSRetriever
-from recsys.retrieval.two_tower import TwoTowerRetriever
+from recsys.retrieval.registry import build_retrievers
 from recsys.split import assert_no_time_leakage, time_split
-
-
-def build_recommenders(config: dict, n_users: int, n_items: int) -> dict:
-    return {
-        "popularity": PopularityRecommender(n_items),
-        "recent_popularity": RecentPopularityRecommender(
-            n_items, config["baselines"]["recent_window_days"]
-        ),
-        "item_item_cf": ItemItemCF(n_users, n_items, config["baselines"]["item_cf_neighbors"]),
-        "als": ALSRetriever(n_users, n_items, **config["als"]),
-        "two_tower": TwoTowerRetriever(n_users, n_items, **config["two_tower"]),
-    }
 
 
 def main() -> None:
@@ -49,7 +35,7 @@ def main() -> None:
         ("test", pd.concat([split.train, split.val]), split.test),
     ]
     rows = []
-    for name, recommender in build_recommenders(config, data.n_users, data.n_items).items():
+    for name, recommender in build_retrievers(config, data.n_users, data.n_items).items():
         started = time.perf_counter()
         recommender.fit(split.train)
         fit_seconds = time.perf_counter() - started
