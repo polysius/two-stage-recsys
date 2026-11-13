@@ -98,3 +98,81 @@ Observations:
   popularity features alongside retriever scores, and the final candidate set can be a union of
   retrievers.
 - Single seed, no confidence intervals; differences below about 0.005 should not be read as real.
+
+## M3: ranking
+
+Produced by `make ranking`; the full output is written to `artifacts/ranking.md`.
+
+Protocol:
+
+1. Fit all five retrievers on train (popularity, recent popularity, item-item CF, ALS, two-tower).
+2. Take the top 100 from each, merge them into one candidate set per user (about 420 candidates
+   per user on validation), and compute features from train history only.
+3. Label a candidate 1 when the user interacted with it in the validation window. Train the
+   LightGBM LambdaMART ranker on these rows. 20% of validation users are held out to stop
+   boosting early (33 trees were used). The split is by user.
+4. For the test window, build candidates and features the same way from train plus validation
+   history (retrievers are not refit) and score with the ranker. The test window is not touched
+   before this step.
+
+Features (18 in total), grouped for the ablation:
+
+- retriever: rank in each retriever's top 100 (empty when absent) and the ALS and two-tower
+  scores for every candidate
+- user: interaction count, mean rating, days since last interaction, mean popularity of the
+  items they interacted with
+- item: interaction count, count in the last 90 days, mean rating, days since first and last
+  interaction
+- pair: item popularity minus the user's usual popularity, item mean rating minus user mean rating
+
+User and item ids are excluded. They are assigned in order of first appearance over the whole log,
+so they would reveal when an item first shows up, including in the test window. An earlier run
+that included them scored ndcg@10 0.0378, against 0.0291 here, so the id columns had been
+leaking.
+
+Test window, same 8,895 users as M1 and M2:
+
+| model | recall@10 | ndcg@10 | mrr | recall@100 |
+|:--|--:|--:|--:|--:|
+| global popularity | 0.0189 | 0.0103 | 0.0115 | 0.0523 |
+| recent popularity | 0.0238 | 0.0102 | 0.0126 | 0.1394 |
+| item-item CF | 0.0074 | 0.0039 | 0.0051 | 0.0344 |
+| ALS | 0.0151 | 0.0090 | 0.0118 | 0.0723 |
+| two-tower | 0.0045 | 0.0027 | 0.0040 | 0.0340 |
+| candidates + ranker | 0.0515 | 0.0291 | 0.0332 | 0.1705 |
+
+The ranker nearly triples ndcg@10 over the best single retriever (0.0291 against 0.0103) and lifts
+recall@100 from 0.139 to 0.171. The candidate set contains 22.7% of the relevant test pairs, which
+is the ceiling for any ranker on these candidates.
+
+Feature-group ablation, retraining the ranker each time and scoring on test:
+
+| features | recall@10 | ndcg@10 | mrr | recall@100 |
+|:--|--:|--:|--:|--:|
+| all features | 0.0515 | 0.0291 | 0.0332 | 0.1705 |
+| without retriever | 0.0304 | 0.0145 | 0.0179 | 0.1603 |
+| without user | 0.0524 | 0.0293 | 0.0339 | 0.1718 |
+| without item | 0.0418 | 0.0239 | 0.0279 | 0.1459 |
+| without pair | 0.0550 | 0.0305 | 0.0342 | 0.1705 |
+| only retriever | 0.0468 | 0.0265 | 0.0295 | 0.1454 |
+| only user | 0.0228 | 0.0119 | 0.0143 | 0.1071 |
+| only item | 0.0328 | 0.0168 | 0.0188 | 0.1558 |
+| only pair | 0.0113 | 0.0066 | 0.0092 | 0.0728 |
+
+Observations:
+
+- The retriever scores matter most: removing them halves ndcg@10. The two-tower score is the
+  second most important feature by gain (13.9%) even though the two-tower model is weak on its
+  own, which suggests its scores add information the other retrievers lack. This was not tested
+  directly, for example by dropping that one score.
+- Item features come next, led by the count of interactions in the last 90 days (23.7% of gain).
+  This matches the M1 finding that recency drives demand in this category.
+- Removing the user group or the pair group changes ndcg@10 by less than 0.002 in either
+  direction, which is inside the noise of a single run. User and pair features add nothing
+  measurable here. Users average about 9 interactions, which leaves little to summarise.
+- The ranker with retriever features alone (ndcg@10 0.0265) is already most of the gain. Item
+  features on top add 0.003.
+- Single seed and a single split, no confidence intervals. Differences below about 0.003 in
+  ndcg@10 should not be read as real. The ranker is trained on one validation window with
+  features from train only, and applied with features from a longer history on test, so the
+  feature distributions shift slightly between training and test.

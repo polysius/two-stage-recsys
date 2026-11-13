@@ -31,3 +31,6 @@ class ALSRetriever:
 
     def recommend(self, users, k, seen):
         return self.retriever.recommend(users, k, seen)
+
+    def score_pairs(self, users, items):
+        return self.retriever.score_pairs(users, items)

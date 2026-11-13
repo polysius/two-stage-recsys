@@ -82,3 +82,6 @@ class TwoTowerRetriever:
 
     def recommend(self, users: np.ndarray, k: int, seen):
         return self.retriever.recommend(users, k, seen)
+
+    def score_pairs(self, users, items):
+        return self.retriever.score_pairs(users, items)

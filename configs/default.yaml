@@ -20,3 +20,15 @@ two_tower:
 baselines:
   recent_window_days: 90
   item_cf_neighbors: 50
+ranking:
+  candidates_per_retriever: 100
+  holdout_fraction: 0.2        # share of validation users held out to stop boosting early
+  early_stopping_rounds: 30
+  lightgbm:
+    n_estimators: 500
+    learning_rate: 0.05
+    num_leaves: 31
+    min_child_samples: 50
+    subsample: 0.8
+    subsample_freq: 1
+    colsample_bytree: 0.8
