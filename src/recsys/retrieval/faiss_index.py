@@ -34,5 +34,7 @@ class EmbeddingRetriever:
         for row, candidates in enumerate(neighbours):
             seen_items = set(seen_rows[row].indices)
             kept = [item for item in candidates if item not in seen_items][:k]
+            if len(kept) < k:
+                raise ValueError(f"user {users[row]} has fewer than {k} unseen items")
             recommended[row] = kept
         return recommended

@@ -28,7 +28,7 @@ class TwoTowerRetriever:
 
     Training uses in-batch negatives: for a batch of positive pairs, every other item in the
     batch is a negative for each user, and a softmax over the batch is trained to pick the
-    true item. Items that appear twice in a batch are masked so a positive is never a negative.
+    true item. Items that appear twice in a batch are masked so the same item is never both positive and negative for a row.
     """
 
     def __init__(self, n_users: int, n_items: int, embedding_dim: int, output_dim: int,
@@ -37,13 +37,14 @@ class TwoTowerRetriever:
         self.n_users, self.n_items = n_users, n_items
         self.epochs, self.batch_size = epochs, batch_size
         self.learning_rate, self.temperature, self.seed = learning_rate, temperature, seed
+        torch.manual_seed(seed)  # seed before building the towers so initial weights are reproducible
         self.user_tower = Tower(n_users, embedding_dim, output_dim)
         self.item_tower = Tower(n_items, embedding_dim, output_dim)
         self.retriever: EmbeddingRetriever | None = None
         self.loss_history: list[float] = []
 
     def fit(self, train: pd.DataFrame) -> "TwoTowerRetriever":
-        torch.manual_seed(self.seed)
+        self.loss_history = []
         users = torch.as_tensor(train["user_id"].to_numpy(), dtype=torch.long)
         items = torch.as_tensor(train["item_id"].to_numpy(), dtype=torch.long)
         parameters = [*self.user_tower.parameters(), *self.item_tower.parameters()]
