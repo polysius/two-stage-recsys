@@ -47,7 +47,7 @@ def train_ranker(
 def top_k_per_user(features: pd.DataFrame, scores: np.ndarray, k: int) -> np.ndarray:
     """Item ids of the k highest-scoring candidates per user, with users in ascending order."""
     ordered = features[["user_id", "item_id"]].assign(score=scores).sort_values(
-        ["user_id", "score"], ascending=[True, False], kind="stable"
+        ["user_id", "score"], ascending=[True, False], kind="stable"  # ties keep row order
     )
     top = ordered.groupby("user_id").head(k)
     if top.groupby("user_id").size().min() < k:

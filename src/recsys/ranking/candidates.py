@@ -11,6 +11,7 @@ def generate_candidates(
     seen: sp.csr_matrix,
     per_retriever: int,
     batch_size: int = 2000,
+    seed: int = 0,
 ) -> pd.DataFrame:
     """Return one row per distinct (user, item) proposed by any retriever.
 
@@ -39,7 +40,11 @@ def generate_candidates(
             candidates[f"score_{name}"] = retriever.score_pairs(
                 candidates["user_id"].to_numpy(), candidates["item_id"].to_numpy()
             )
-    return candidates.sort_values(["user_id", "item_id"]).reset_index(drop=True)
+    # Order candidates randomly inside each user. Tied scores are then broken by chance, not by
+    # item id, and item ids track popularity over the whole log, including the evaluation window.
+    shuffle_key = np.random.default_rng(seed).random(len(candidates))
+    ordered = candidates.assign(_shuffle=shuffle_key).sort_values(["user_id", "_shuffle"])
+    return ordered.drop(columns="_shuffle").reset_index(drop=True)
 
 
 def label_candidates(candidates: pd.DataFrame, eval_table: pd.DataFrame) -> np.ndarray:

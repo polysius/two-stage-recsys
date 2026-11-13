@@ -41,7 +41,7 @@ def build_stage(retrievers, history, eval_table, data, per_retriever):
     n_relevant = len(eval_table[["user_id", "item_id"]].drop_duplicates())
     print(f"{len(users)} users, {len(features)} candidates, "
           f"candidate recall {labels.sum() / n_relevant:.4f}", flush=True)
-    return features, labels, users, labels.sum() / n_relevant
+    return features, labels, users, labels.sum() / n_relevant, len(features) / len(users)
 
 
 def score_ranker(ranker, columns, features, users, history, eval_table, data, k_values):
@@ -73,10 +73,10 @@ def main() -> None:
         print(f"fitted {name} in {time.perf_counter() - started:.0f}s", flush=True)
 
     test_history = pd.concat([split.train, split.val])
-    train_x, train_y, _, val_recall = build_stage(
+    train_x, train_y, _, val_recall, val_per_user = build_stage(
         retrievers, split.train, split.val, data, ranking["candidates_per_retriever"]
     )
-    test_x, _, test_users, test_recall = build_stage(
+    test_x, _, test_users, test_recall, test_per_user = build_stage(
         retrievers, test_history, split.test, data, ranking["candidates_per_retriever"]
     )
 
@@ -123,6 +123,7 @@ def main() -> None:
         + comparison.round(4).to_markdown(index=False)
         + f"\n\nCandidate recall (share of relevant pairs inside the candidate set): "
         f"validation {val_recall:.4f}, test {test_recall:.4f}\n\n"
+        f"Candidates per user: validation {val_per_user:.0f}, test {test_per_user:.0f}\n\n"
         f"Trees used: {ranker.best_iteration_}\n\n## Feature importance (gain, %)\n\n"
         + importance.to_frame("gain %").to_markdown() + "\n\n## Feature-group ablation (test window)\n\n"
         + ablation.round(4).to_markdown(index=False) + "\n"

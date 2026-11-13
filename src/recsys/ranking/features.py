@@ -25,9 +25,8 @@ GROUPS = {
 def feature_columns(frame: pd.DataFrame, groups: list[str] | None = None) -> list[str]:
     wanted = groups if groups is not None else list(GROUPS)
     prefixes = tuple(prefix for group in wanted for prefix in GROUPS[group])
-    # The id columns match the user_ and item_ prefixes but are not features: ids are assigned in
-    # order of first appearance over the whole log, so they would leak when an item or user
-    # first shows up, including in the evaluation window.
+    # The id columns match the user_ and item_ prefixes but are not features: ids follow the raw
+    # file order, which tracks popularity over the whole log, including the evaluation window.
     return [
         column for column in frame.columns
         if column.startswith(prefixes) and column not in ID_COLUMNS

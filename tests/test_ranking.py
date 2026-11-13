@@ -46,6 +46,21 @@ def test_candidates_are_the_union_of_retrievers_without_seen_items(interactions)
     assert not any(pair in seen_pairs for pair in zip(candidates["user_id"], candidates["item_id"]))
 
 
+def test_candidates_are_not_ordered_by_item_id_within_a_user(interactions):
+    split = time_split(interactions, 0.1, 0.1)
+    users = np.array(sorted(relevant_items_by_user(split.val)))
+    seen = build_user_item_matrix(split.train, N_USERS, N_ITEMS)
+    retrievers = _fitted_retrievers(split.train)
+
+    candidates = generate_candidates(retrievers, users, seen, per_retriever=10)
+
+    within_user_sorted = candidates.groupby("user_id")["item_id"].apply(
+        lambda items: items.is_monotonic_increasing
+    )
+    assert not within_user_sorted.all()
+    assert candidates["user_id"].is_monotonic_increasing
+
+
 def test_labels_mark_exactly_the_evaluation_interactions():
     candidates = pd.DataFrame({"user_id": [0, 0, 1], "item_id": [5, 6, 5]})
     eval_table = pd.DataFrame({"user_id": [0, 1, 1], "item_id": [6, 5, 5]})
