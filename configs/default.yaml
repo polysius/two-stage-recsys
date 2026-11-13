@@ -5,6 +5,18 @@ split:
   test_fraction: 0.10     # share of interactions (by time) used for test
 eval:
   k_values: [10, 20, 100]
+als:
+  factors: 64
+  regularization: 0.01
+  iterations: 15
+  alpha: 40
+two_tower:
+  embedding_dim: 64
+  output_dim: 64
+  epochs: 20
+  batch_size: 1024
+  learning_rate: 0.03
+  temperature: 0.3
 baselines:
   recent_window_days: 90
   item_cf_neighbors: 50

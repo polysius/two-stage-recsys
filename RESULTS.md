@@ -1,8 +1,8 @@
 # Results
 
-All numbers come from `make baselines` on Amazon Reviews 2023, Video Games, 5-core ratings
+All numbers come from `make baselines` and `make retrieval` on Amazon Reviews 2023, Video Games, 5-core ratings
 (814,586 interactions, 94,762 users, 25,612 items). Full tables with k=20 and coverage at every
-cutoff are written to `artifacts/baselines.md` by the script.
+cutoff are written to `artifacts/baselines.md` and `artifacts/retrieval.md` by the scripts.
 
 ## M1: baselines
 
@@ -43,3 +43,58 @@ Observations:
   coverage. It was not tuned (neighbour count and similarity are defaults), so treat it as a
   floor for personalised methods, not as a tuned reference.
 - Popularity baselines cover under 0.2% of the catalogue at k=10.
+
+## M2: candidate generation
+
+Produced by `make retrieval`; the full table is written to `artifacts/retrieval.md`. Same split,
+filtering and seen-item rules as M1. Items are retrieved with an exact FAISS inner-product index.
+
+Test window:
+
+| model | recall@10 | recall@100 | ndcg@10 | mrr | coverage@100 | popularity bias@100 |
+|:--|--:|--:|--:|--:|--:|--:|
+| global popularity | 0.0189 | 0.0523 | 0.0103 | 0.0115 | 0.0048 | 30.6 |
+| recent popularity (90 days) | 0.0238 | 0.1394 | 0.0102 | 0.0126 | 0.0052 | 12.2 |
+| item-item CF | 0.0074 | 0.0344 | 0.0039 | 0.0051 | 0.8013 | 3.8 |
+| ALS | 0.0151 | 0.0723 | 0.0090 | 0.0118 | 0.2097 | 10.9 |
+| two-tower | 0.0045 | 0.0340 | 0.0027 | 0.0040 | 0.9980 | 1.7 |
+
+Validation recall@100: ALS 0.0956, two-tower 0.0496 (recent popularity 0.1721).
+
+Tuning used the validation window only, so the test window did not influence any choice.
+
+- ALS: `scripts/tune_retrieval.py --model als` sweeps factors, regularisation and `alpha`
+  (confidence scaling). `alpha` mattered most. Without it (alpha 1, the earlier run) validation recall@100 was 0.056;
+  alpha 40 gives 0.096 and alpha 100 gives 0.097. Factors and regularisation changed it by less
+  than 0.01.
+- Two-tower: configurations were tried by hand with validation recall@100 as the score.
+
+  | learning rate | temperature | epochs | batch | val recall@100 |
+  |--:|--:|--:|--:|--:|
+  | 0.001 | 0.1 | 5 | 4096 | 0.004 |
+  | 0.01 | 0.1 | 5 | 1024 | 0.016 |
+  | 0.03 | 0.1 | 5 | 1024 | 0.025 |
+  | 0.01 | 0.5 | 5 | 1024 | 0.023 |
+  | 0.1 | 0.1 | 15 | 1024 | 0.039 |
+  | 0.03 | 0.1 | 20 | 1024 | 0.039 |
+  | 0.03 | 0.3 | 20 | 1024 | 0.051 (0.0496 after the seed fix) |
+
+  The first setting left the loss at ln(batch size), so the model was at random. The last row is
+  the committed config. The seed was later fixed to cover weight initialisation, which moved
+  its score from 0.051 to 0.0496. The grid in `tune_retrieval.py` is a starting point for reproducing the
+  search, not the exact record of it.
+
+Observations:
+
+- ALS beats item-item CF and global popularity on recall@100 and beats item-item CF on ndcg@10
+  (0.0090 against 0.0039; global popularity is 0.0103, within noise). It covers 21% of the
+  catalogue against 0.5% for global popularity. It does not beat recent popularity.
+- The ID-only two-tower model is on par with item-item CF at recall@100 and lower at the top of
+  the list. Users have about 9 interactions on average, so id embeddings are weakly trained, and
+  in-batch negatives are sampled by popularity, which pushes it toward long-tail items
+  (popularity bias 1.7, coverage 99.8%). Item and user side features are the likely fix and are
+  not part of M2.
+- Recent popularity still wins on recall@100, so the ranker in M3 should take recency and
+  popularity features alongside retriever scores, and the final candidate set can be a union of
+  retrievers.
+- Single seed, no confidence intervals; differences below about 0.005 should not be read as real.

@@ -11,7 +11,7 @@ Dataset: Amazon Reviews 2023, Video Games 5-core ratings.
 | milestone | state |
 |:--|:--|
 | M1 data and baselines | done, see [RESULTS.md](RESULTS.md) |
-| M2 candidate generation (ALS, two-tower, FAISS) | planned |
+| M2 candidate generation (ALS, two-tower, FAISS) | done, see [RESULTS.md](RESULTS.md) |
 | M3 ranking (LightGBM LambdaMART) | planned |
 | M4 simulated A/B experiment | planned |
 | M5 serving (FastAPI, Redis) | planned |
@@ -26,6 +26,7 @@ pip install -e ".[dev]" tabulate
 make data DATA_DIR=~/recsys-data
 make test
 make baselines DATA_DIR=~/recsys-data
+make retrieval DATA_DIR=~/recsys-data
 ```
 
 `make data` downloads the ratings file, checks it against the pinned SHA-256 (deleting the file on a
@@ -39,7 +40,8 @@ src/recsys/split.py        time-based split and leakage check
 src/recsys/metrics.py      recall@k, NDCG@k, MRR, coverage, popularity bias
 src/recsys/baselines.py    popularity, recent popularity, item-item CF
 src/recsys/evaluation.py   score any recommender on a split
-scripts/                   data download, baseline run
+src/recsys/retrieval/      ALS, two-tower and FAISS candidate generation
+scripts/                   data download, baseline and retrieval runs, retrieval tuning
 tests/                     unit tests on a small synthetic log
 ```
 

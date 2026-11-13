@@ -2,7 +2,7 @@
 PYTHON ?= python
 DATA_DIR ?= data
 
-.PHONY: data test lint baselines
+.PHONY: data test lint baselines retrieval
 
 data:
 	$(PYTHON) scripts/download_data.py --data-dir $(DATA_DIR)
@@ -15,3 +15,6 @@ lint:
 
 baselines:
 	PYTHONPATH=src $(PYTHON) scripts/run_baselines.py --data-dir $(DATA_DIR) --output artifacts/baselines.md
+
+retrieval:
+	PYTHONPATH=src $(PYTHON) scripts/run_retrieval.py --data-dir $(DATA_DIR) --output artifacts/retrieval.md
