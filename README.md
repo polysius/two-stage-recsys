@@ -42,7 +42,8 @@ src/recsys/metrics.py      recall@k, NDCG@k, MRR, coverage, popularity bias
 src/recsys/baselines.py    popularity, recent popularity, item-item CF
 src/recsys/evaluation.py   score any recommender on a split
 src/recsys/retrieval/      ALS, two-tower and FAISS candidate generation
-scripts/                   data download, baseline and retrieval runs, retrieval tuning
+src/recsys/ranking/        merged candidates, ranking features, LightGBM LambdaMART
+scripts/                   data download, baseline, retrieval and ranking runs, retrieval tuning
 tests/                     unit tests on a small synthetic log
 ```
 
