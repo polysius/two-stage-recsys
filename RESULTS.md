@@ -61,13 +61,27 @@ Test window:
 
 Validation recall@100: ALS 0.0956, two-tower 0.0489 (recent popularity 0.1721).
 
-Tuning used the validation window only (`scripts/tune_retrieval.py`).
+Tuning used the validation window only, so the test window did not influence any choice.
 
-- ALS: confidence scaling (`alpha`) mattered most. Without it validation recall@100 was 0.056;
-  alpha 40 gives 0.096. Factors and regularisation changed it by less than 0.01.
-- Two-tower: the initial settings (lr 0.001, temperature 0.1) left the loss at ln(batch size),
-  so the model was at random. Raising the learning rate to 0.03 and the temperature to 0.3
-  lifted validation recall@100 from 0.005 to 0.049.
+- ALS: `scripts/tune_retrieval.py --model als` sweeps factors, regularisation and `alpha`
+  (confidence scaling). `alpha` mattered most. Without it validation recall@100 was 0.056;
+  alpha 40 gives 0.096 and alpha 100 gives 0.097. Factors and regularisation changed it by less
+  than 0.01.
+- Two-tower: configurations were tried by hand with validation recall@100 as the score.
+
+  | learning rate | temperature | epochs | batch | val recall@100 |
+  |--:|--:|--:|--:|--:|
+  | 0.001 | 0.1 | 5 | 4096 | 0.004 |
+  | 0.01 | 0.1 | 5 | 1024 | 0.016 |
+  | 0.03 | 0.1 | 5 | 1024 | 0.025 |
+  | 0.01 | 0.5 | 5 | 1024 | 0.023 |
+  | 0.1 | 0.1 | 15 | 1024 | 0.039 |
+  | 0.03 | 0.1 | 20 | 1024 | 0.039 |
+  | 0.03 | 0.3 | 20 | 1024 | 0.051 |
+
+  The first setting left the loss at ln(batch size), so the model was at random. The last row is
+  the committed config. The grid in `tune_retrieval.py` is a starting point for reproducing the
+  search, not the exact record of it.
 
 Observations:
 
