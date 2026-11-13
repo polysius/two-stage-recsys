@@ -1,8 +1,8 @@
 # Results
 
-All numbers come from `make baselines` on Amazon Reviews 2023, Video Games, 5-core ratings
+All numbers come from `make baselines` and `make retrieval` on Amazon Reviews 2023, Video Games, 5-core ratings
 (814,586 interactions, 94,762 users, 25,612 items). Full tables with k=20 and coverage at every
-cutoff are written to `artifacts/baselines.md` by the script.
+cutoff are written to `artifacts/baselines.md` and `artifacts/retrieval.md` by the scripts.
 
 ## M1: baselines
 

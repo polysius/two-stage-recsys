@@ -40,7 +40,8 @@ src/recsys/split.py        time-based split and leakage check
 src/recsys/metrics.py      recall@k, NDCG@k, MRR, coverage, popularity bias
 src/recsys/baselines.py    popularity, recent popularity, item-item CF
 src/recsys/evaluation.py   score any recommender on a split
-scripts/                   data download, baseline run
+src/recsys/retrieval/      ALS, two-tower and FAISS candidate generation
+scripts/                   data download, baseline and retrieval runs, retrieval tuning
 tests/                     unit tests on a small synthetic log
 ```
 
