@@ -12,14 +12,23 @@ def recall_at_k(recommended: np.ndarray, relevant: list[set[int]], k: int) -> fl
     return float(np.mean(scores))
 
 
-def ndcg_at_k(recommended: np.ndarray, relevant: list[set[int]], k: int) -> float:
+def ndcg_per_user(recommended: np.ndarray, relevant: list[set[int]], k: int) -> np.ndarray:
     discounts = 1.0 / np.log2(np.arange(2, k + 2))
     scores = []
     for row, truth in zip(recommended, relevant):
         gains = np.array([item in truth for item in row[:k]], dtype=float)
         ideal_hits = min(len(truth), k)
         scores.append((gains * discounts[: len(gains)]).sum() / discounts[:ideal_hits].sum())
-    return float(np.mean(scores))
+    return np.array(scores)
+
+
+def ndcg_at_k(recommended: np.ndarray, relevant: list[set[int]], k: int) -> float:
+    return float(ndcg_per_user(recommended, relevant, k).mean())
+
+
+def hit_per_user(recommended: np.ndarray, relevant: list[set[int]], k: int) -> np.ndarray:
+    """1 when any of the top-k items is relevant to the user, else 0."""
+    return np.array([bool(set(row[:k]) & truth) for row, truth in zip(recommended, relevant)])
 
 
 def mrr(recommended: np.ndarray, relevant: list[set[int]]) -> float:

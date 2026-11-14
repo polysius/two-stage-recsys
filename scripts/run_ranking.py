@@ -52,11 +52,29 @@ def score_ranker(ranker, columns, features, users, history, eval_table, data, k_
     return evaluate(recommended, [relevant[u] for u in users], popularity, k_values)
 
 
+def save_test_recommendations(
+    path, retrievers, ranker, columns, test_x, test_users, test_history, data, k, batch_size=2000
+):
+    """Store each model's top-k for the test users, so the A/B simulation can replay them."""
+    seen = build_user_item_matrix(test_history, data.n_users, data.n_items)
+    recommended = {
+        name: np.vstack([
+            retriever.recommend(test_users[start : start + batch_size], k, seen)
+            for start in range(0, len(test_users), batch_size)
+        ])
+        for name, retriever in retrievers.items()
+    }
+    recommended["ranker"] = top_k_per_user(test_x, ranker.predict(test_x[columns]), k)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(path, users=test_users, **recommended)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/default.yaml")
     parser.add_argument("--data-dir", default="data")
     parser.add_argument("--output", default="artifacts/ranking.md")
+    parser.add_argument("--recommendations", default="artifacts/test_recommendations.npz")
     args = parser.parse_args()
 
     config = yaml.safe_load(Path(args.config).read_text())
@@ -99,6 +117,10 @@ def main() -> None:
         rows.append({"model": f"{name} only", **metrics})
 
     ranker, columns, metrics = fit_and_score(None)
+    save_test_recommendations(
+        Path(args.recommendations), retrievers, ranker, columns, test_x, test_users,
+        test_history, data, max(k_values),
+    )
     print("ranker trees", ranker.best_iteration_, {k: round(metrics[k], 4) for k in REPORT_METRICS})
     rows.append({"model": "candidates + ranker", **metrics})
     comparison = pd.DataFrame(rows)[["model", *REPORT_METRICS]]
