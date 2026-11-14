@@ -44,7 +44,8 @@ src/recsys/baselines.py    popularity, recent popularity, item-item CF
 src/recsys/evaluation.py   score any recommender on a split
 src/recsys/retrieval/      ALS, two-tower and FAISS candidate generation
 src/recsys/ranking/        merged candidates, ranking features, LightGBM LambdaMART
-scripts/                   data download, baseline, retrieval and ranking runs, retrieval tuning
+src/recsys/experiment.py   simulated A/B experiment, power analysis and statistics
+scripts/                   data download, baseline, retrieval, ranking and experiment runs, retrieval tuning
 tests/                     unit tests on a small synthetic log
 ```
 
