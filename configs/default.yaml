@@ -32,3 +32,11 @@ ranking:
     subsample: 0.8
     subsample_freq: 1
     colsample_bytree: 0.8
+experiment:
+  top_k: 10
+  alpha: 0.05
+  power: 0.8
+  treatment_share: 0.5
+  n_repeats: 1000
+  seed: 0
+  planning_relative_lifts: [0.1, 0.2, 0.3, 0.5]

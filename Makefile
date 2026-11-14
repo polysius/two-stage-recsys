@@ -2,7 +2,7 @@
 PYTHON ?= python
 DATA_DIR ?= data
 
-.PHONY: data test lint baselines retrieval ranking
+.PHONY: data test lint baselines retrieval ranking experiment
 
 data:
 	$(PYTHON) scripts/download_data.py --data-dir $(DATA_DIR)
@@ -21,3 +21,6 @@ retrieval:
 
 ranking:
 	PYTHONPATH=src $(PYTHON) scripts/run_ranking.py --data-dir $(DATA_DIR) --output artifacts/ranking.md
+
+experiment:
+	PYTHONPATH=src $(PYTHON) scripts/run_experiment.py --data-dir $(DATA_DIR) --output artifacts/experiment.md
