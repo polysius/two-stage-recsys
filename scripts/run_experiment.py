@@ -4,8 +4,9 @@ Needs `artifacts/test_recommendations.npz`, which `make ranking` writes. Usage:
     python scripts/run_experiment.py --data-dir ~/recsys-data --output artifacts/experiment.md
 
 Order of work, which mirrors a real experiment:
-  1. Plan: estimate the baseline rate on the validation window and size the test. Only train and
-     validation data are read here, so the plan cannot depend on the result.
+  1. Plan: estimate the baseline rate on the validation window and size the test. The baseline
+     uses train and validation data only. The user count comes from who is active in the test
+     window, which is a head count and not an outcome, so the plan cannot depend on the result.
   2. Run: randomly assign the test users to arms and compare hit rate at 10.
   3. Check: sample-ratio mismatch, an A/A test, and repeated assignments.
 """
@@ -118,7 +119,7 @@ def main() -> None:
     full_difference = float(hit_treatment.mean() - hit_control.mean())
 
     lines = [
-        "## Plan (train and validation only)",
+        "## Plan",
         "",
         (f"Metric: hit rate at {k} (a user counts as a hit when any of the {k} recommended items "
           f"is one they interact with in the test window). Control hit rate on validation: "

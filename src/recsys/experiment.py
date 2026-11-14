@@ -24,8 +24,10 @@ def minimum_detectable_lift(baseline: float, n_per_arm: int, alpha: float, power
         nobs1=n_per_arm, alpha=alpha, power=power, ratio=1.0
     )
     # Invert Cohen's h = 2*asin(sqrt(p2)) - 2*asin(sqrt(p1)) for p2.
-    treated = math.sin(math.asin(math.sqrt(baseline)) + effect / 2) ** 2
-    return treated - baseline
+    angle = math.asin(math.sqrt(baseline)) + effect / 2
+    if angle > math.pi / 2:
+        raise ValueError("this sample size cannot detect any lift above the baseline")
+    return math.sin(angle) ** 2 - baseline
 
 
 def assign_arms(n_users: int, treatment_share: float, seed: int) -> np.ndarray:
@@ -59,31 +61,45 @@ class ProportionResult:
 
 
 def compare_proportions(control: np.ndarray, treatment: np.ndarray, alpha: float) -> ProportionResult:
-    """Difference and ratio of two success rates with score intervals and a z-test."""
+    """Difference (Newcombe interval) and ratio of two success rates, with a pooled z-test.
+
+    The relative lift is NaN when the control has no successes, since the ratio is undefined.
+    """
     hits_c, n_c = int(control.sum()), len(control)
     hits_t, n_t = int(treatment.sum()), len(treatment)
     rate_c, rate_t = hits_c / n_c, hits_t / n_t
 
-    def interval(compare: str) -> tuple[float, float]:
+    def interval(compare: str, method: str) -> tuple[float, float]:
         low, high = confint_proportions_2indep(
-            hits_t, n_t, hits_c, n_c, compare=compare, method="score", alpha=alpha
+            hits_t, n_t, hits_c, n_c, compare=compare, method=method, alpha=alpha
         )
         return float(low), float(high)
 
-    # Pooled-variance z-test, the same test the sample-size formula assumes.
-    pooled = (hits_c + hits_t) / (n_c + n_t)
-    standard_error = math.sqrt(pooled * (1 - pooled) * (1 / n_c + 1 / n_t))
-    z = (rate_t - rate_c) / standard_error
-    ratio_low, ratio_high = interval("ratio")
+    if hits_c > 0 and hits_t > 0:
+        ratio_low, ratio_high = interval("ratio", "score")
+        relative_lift = rate_t / rate_c - 1
+        relative_lift_ci = (ratio_low - 1, ratio_high - 1)
+    else:
+        relative_lift, relative_lift_ci = math.nan, (math.nan, math.nan)
     return ProportionResult(
         rate_control=rate_c,
         rate_treatment=rate_t,
         difference=rate_t - rate_c,
-        difference_ci=interval("diff"),
-        relative_lift=rate_t / rate_c - 1,
-        relative_lift_ci=(ratio_low - 1, ratio_high - 1),
-        p_value=float(2 * stats.norm.sf(abs(z))),
+        difference_ci=interval("diff", "newcomb"),
+        relative_lift=relative_lift,
+        relative_lift_ci=relative_lift_ci,
+        p_value=two_proportion_p_value(hits_c, n_c, hits_t, n_t),
     )
+
+
+def two_proportion_p_value(hits_c: int, n_c: int, hits_t: int, n_t: int) -> float:
+    """Two-sided pooled z-test. Returns 1.0 when both arms have the same all-or-nothing outcome."""
+    pooled = (hits_c + hits_t) / (n_c + n_t)
+    variance = pooled * (1 - pooled) * (1 / n_c + 1 / n_t)
+    if variance == 0:
+        return 1.0
+    z = (hits_t / n_t - hits_c / n_c) / math.sqrt(variance)
+    return float(2 * stats.norm.sf(abs(z)))
 
 
 @dataclass(frozen=True)
@@ -128,9 +144,11 @@ def repeat_experiment(
         in_treatment = assign_arms(len(outcome_control), treatment_share, seed + repeat)
         control = outcome_control[~in_treatment]
         treatment = outcome_treatment[in_treatment]
-        result = compare_proportions(control, treatment, alpha)
-        differences.append(result.difference)
-        significant += result.p_value < alpha
+        p_value = two_proportion_p_value(
+            int(control.sum()), len(control), int(treatment.sum()), len(treatment)
+        )
+        differences.append(treatment.mean() - control.mean())
+        significant += p_value < alpha
     return {
         "significant_share": significant / n_repeats,
         "mean_difference": float(np.mean(differences)),

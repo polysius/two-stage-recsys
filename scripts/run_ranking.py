@@ -52,6 +52,15 @@ def score_ranker(ranker, columns, features, users, history, eval_table, data, k_
     return evaluate(recommended, [relevant[u] for u in users], popularity, k_values)
 
 
+def fit_retrievers(config, data, table, label):
+    retrievers = build_retrievers(config, data.n_users, data.n_items)
+    for name, retriever in retrievers.items():
+        started = time.perf_counter()
+        retriever.fit(table)
+        print(f"fitted {name} on {label} in {time.perf_counter() - started:.0f}s", flush=True)
+    return retrievers
+
+
 def save_test_recommendations(
     path, retrievers, ranker, columns, test_x, test_users, test_history, data, k, batch_size=2000
 ):
@@ -84,18 +93,17 @@ def main() -> None:
     split = time_split(data.table, config["split"]["val_fraction"], config["split"]["test_fraction"])
     assert_no_time_leakage(split)
 
-    retrievers = build_retrievers(config, data.n_users, data.n_items)
-    for name, retriever in retrievers.items():
-        started = time.perf_counter()
-        retriever.fit(split.train)
-        print(f"fitted {name} in {time.perf_counter() - started:.0f}s", flush=True)
-
+    retrievers = fit_retrievers(config, data, split.train, "train")
+    # Before the test window a deployed system would refit on everything seen so far, so the
+    # test stage uses retrievers fit on train plus validation. The ranker still trains on
+    # candidates from the train-only retrievers, which were equally fresh for the validation window.
     test_history = pd.concat([split.train, split.val])
+    test_retrievers = fit_retrievers(config, data, test_history, "train + validation")
     train_x, train_y, _, val_recall, val_per_user = build_stage(
         retrievers, split.train, split.val, data, ranking["candidates_per_retriever"]
     )
     test_x, _, test_users, test_recall, test_per_user = build_stage(
-        retrievers, test_history, split.test, data, ranking["candidates_per_retriever"]
+        test_retrievers, test_history, split.test, data, ranking["candidates_per_retriever"]
     )
 
     def fit_and_score(groups):
@@ -110,15 +118,21 @@ def main() -> None:
         return ranker, columns, metrics
 
     rows = []
-    for name, retriever in retrievers.items():
+    for name, retriever in test_retrievers.items():
         metrics = score_recommender(
             retriever, test_history, split.test, data.n_users, data.n_items, k_values
         )
         rows.append({"model": f"{name} only", **metrics})
+    # The M1 and M2 tables score this stale model: recent popularity fit on train only.
+    stale = score_recommender(
+        retrievers["recent_popularity"], test_history, split.test, data.n_users, data.n_items,
+        k_values,
+    )
+    rows.append({"model": "recent_popularity (fit on train only)", **stale})
 
     ranker, columns, metrics = fit_and_score(None)
     save_test_recommendations(
-        Path(args.recommendations), retrievers, ranker, columns, test_x, test_users,
+        Path(args.recommendations), test_retrievers, ranker, columns, test_x, test_users,
         test_history, data, max(k_values),
     )
     print("ranker trees", ranker.best_iteration_, {k: round(metrics[k], 4) for k in REPORT_METRICS})

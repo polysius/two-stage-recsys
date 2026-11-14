@@ -11,20 +11,21 @@ popularity (control)?
 
 - Unit of randomisation: the user. Each user sees one arm for the whole experiment.
 - Population: the 8,895 test-window users who are warm (the user and the items appear in
-  train). 66% of raw validation and test rows are removed by this filter, so the result says nothing about cold
-  users.
+  train). 66% of raw validation and test rows are removed by this filter, so the result says
+  nothing about cold users.
 - Primary metric: hit rate at 10. A user is a hit when any of the 10 recommended items is an item
   they interact with in the test window. It is one binary outcome per user, which keeps the
-  statistics simple and matches the sample-size formula.
+  statistics simple.
 - Secondary metric: ndcg at 10 per user, compared with Welch's t-test.
-- Control: recent popularity over the last 90 days. Treatment: candidates from five retrievers
-  ranked by LightGBM LambdaMART. Both exclude items the user has already interacted with.
+- Control: recent popularity over the last 90 days, refit on train plus validation. Treatment:
+  candidates from five retrievers, also refit on train plus validation, ranked by LightGBM
+  LambdaMART. Both exclude items the user has already interacted with.
 - Test: two-sided, alpha 0.05, power 0.8, 50/50 split.
 
 ## Design and power analysis
 
-The plan uses only train and validation data, so it cannot depend on the result. The control hit
-rate on the validation window is 0.0757. Sample sizes for a two-proportion z-test:
+The baseline comes from the validation window, using the control fit on train: the hit rate is
+0.0757. Sample sizes for a two-proportion test at that baseline:
 
 | relative lift | absolute lift | users per arm |
 |:--|--:|--:|
@@ -33,14 +34,10 @@ rate on the validation window is 0.0757. Sample sizes for a two-proportion z-tes
 | 30% | 0.0227 | 2,408 |
 | 50% | 0.0379 | 930 |
 
-The test window has 4,447 users per arm, so the minimum detectable effect is 0.0165 absolute, or
-22% relative lift, at 80% power. Anything smaller than that would not be reliably detected here.
-
-The validation baseline turned out to be a poor guide to the test window: the control scored
-0.0373 on test, half of its 0.0757 on validation. Demand shifts quickly in this category (see
-the M1 findings), so a plan made on one window can mis-state the baseline for the next. The
-conclusion below does not depend on it, because the observed effect is far above the detectable
-size under either baseline.
+The number of users is the head count of the test window, which is not an outcome. With 4,447
+users per arm, the minimum detectable effect is 0.0165 absolute, or 22% relative lift, at 80%
+power. A true lift smaller than that would usually go undetected here. The control scored 0.0814
+on the test window, close to the 0.0757 the plan assumed.
 
 ## Result
 
@@ -49,23 +46,36 @@ so the split matches the plan.
 
 | metric | control | treatment | difference | 95% CI | relative lift | p-value |
 |:--|--:|--:|--:|:--|--:|--:|
-| hit@10 | 0.0373 | 0.0789 | +0.0416 | [0.0320, 0.0513] | +111% (95% CI 77% to 153%) | 5.3e-17 |
-| ndcg@10 | 0.0101 | 0.0308 | +0.0207 | [0.0167, 0.0247] | +206% | 1.3e-23 |
+| hit@10 | 0.0814 | 0.0933 | +0.0119 | [0.0002, 0.0237] | +14.6% (95% CI 0.2% to 31%) | 0.047 |
+| ndcg@10 | 0.0305 | 0.0372 | +0.0067 | [0.0014, 0.0120] | +21.9% | 0.013 |
 
-The ranker roughly doubles the hit rate. The interval for the absolute difference excludes zero
-by a wide margin and sits well above the minimum detectable effect of 0.0165.
+The ranker looks better, but the evidence is weak. The primary metric has p = 0.047 and a
+confidence interval whose lower end is almost zero. The observed lift of 14.6% is below the 22%
+the experiment was sized to detect.
 
 ## Validity checks
 
 - Sample-ratio mismatch. The real assignment gives p = 0.992. A planted 55/45 assignment gives
   p = 4e-21, so the check does catch a broken split. The usual alarm threshold is p < 0.001.
 - A/A test. Repeating the random assignment 1,000 times with the control in both arms gives
-  4.0% significant results, close to the 5% expected, so the test does not raise false alarms
+  4.8% significant results, close to the 5% expected, so the test does not raise false alarms
   at this sample size.
-- Repeated assignment. Over 1,000 random assignments of the same users, 100% of the A/B tests
-  were significant, with a mean difference of +0.0405 and a standard deviation of 0.0042. Reading
-  both recommenders for every user gives +0.0405, so a single split recovers the full-population
-  effect with the spread shown.
+- Repeated assignment. Over 1,000 random assignments of the same users, only 18.2% of the A/B
+  tests were significant, with a mean difference of +0.0070 and a standard deviation of 0.0052.
+  Reading both recommenders for every user gives +0.0072. The single split above landed on the
+  high side of that spread (+0.0119), so its p-value is better than a typical run would give.
+  At the full-population effect of 0.0072 (a 9% relative lift), detecting it at 80% power would
+  take about 23,500 users per arm, around five times the available test set.
+
+## What went wrong on the first pass
+
+The first version of this experiment used a control that was fit on train only. Its 90-day window
+ended about two years before the test window, so it recommended items that were no longer
+popular. Against that stale control the ranker appeared to double the hit rate (+111%, p = 5e-17).
+Refitting the control on train plus validation, as a real system would, brought the control from
+0.0373 to 0.0814 and the effect down to the figures above. The ranking stage had the same flaw
+and now refits all retrievers before the test window (see RESULTS.md). The lesson for a real
+experiment is to compare against the baseline as it would actually be deployed.
 
 ## Limits of the simulation
 
@@ -76,9 +86,11 @@ way.
   recommendations, so the metric cannot capture the effect of exposure, position, or the page
   around it. It rewards predicting what users did anyway.
 - Both outcomes exist for every user, so the only randomness in the simulation comes from who is
-  assigned to which arm. The confidence intervals therefore describe assignment noise over a
-  fixed set of users. They do not include the variation in real behaviour that a live test would
-  add, so real intervals would be wider.
+  assigned to which arm. The reported intervals use the standard formula that treats users as
+  independent draws. They are somewhat wider than the assignment noise alone (standard error
+  0.0049 against a standard deviation of 0.0042 over repeated assignments), because each user's
+  outcomes under the two recommenders are correlated. A live test would add real behavioural
+  variation that this simulation does not contain.
 - The offline result has no new information beyond M3. The hit rate here is a different summary
   of the same recommendations behind the M3 ndcg and recall figures. What this stage adds is the
   procedure: a power calculation done before looking, a mismatch check, an A/A calibration, and
@@ -88,5 +100,3 @@ way.
 - The ranker is trained on the validation window and scored on the test window. A live system
   would retrain over time, and the effect would change as the data shifts.
 - One run on one time window. No claim is made about other categories or periods.
-- The 22% minimum detectable effect rests on a baseline that did not hold on test. A real
-  experiment should fix the baseline from the most recent window and re-check it before launch.

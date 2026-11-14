@@ -76,3 +76,28 @@ def test_hit_per_user_marks_users_with_any_relevant_item_in_top_k():
 
     assert hits.tolist() == [True, False]
     assert hit_per_user(recommended, [{3}, {9}], k=2).tolist() == [False, False]
+
+
+def test_proportion_comparison_survives_counts_that_broke_the_score_interval():
+    control = np.array([1] * 148 + [0] * (4447 - 148))
+    treatment = np.array([1] * 183 + [0] * (4448 - 183))
+
+    result = compare_proportions(control, treatment, alpha=0.05)
+
+    assert result.difference_ci[0] < result.difference < result.difference_ci[1]
+
+
+def test_proportion_comparison_handles_a_control_with_no_hits():
+    zeros, some = np.zeros(500, dtype=bool), np.arange(500) < 25
+
+    with_lift = compare_proportions(zeros, some, alpha=0.05)
+    nothing = compare_proportions(zeros, zeros, alpha=0.05)
+
+    assert np.isnan(with_lift.relative_lift)
+    assert with_lift.p_value < 0.001
+    assert nothing.p_value == 1.0
+
+
+def test_minimum_detectable_lift_rejects_a_sample_too_small_for_any_lift():
+    with pytest.raises(ValueError):
+        minimum_detectable_lift(0.99, 5, alpha=0.05, power=0.8)
