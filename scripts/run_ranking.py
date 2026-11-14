@@ -4,8 +4,9 @@ Protocol:
   1. Fit every retriever on train.
   2. Build candidates and features for validation users from train history, label them with the
      validation window, and train the ranker on them (early stopping on held-out users).
-  3. Build candidates and features for test users from train + validation history and score
-     them with the ranker. The test window is never used before this step.
+  3. Refit every retriever on train + validation, build candidates and features for test users
+     from that history, and score them with the ranker. The test window is never used before
+     this step.
 
 Usage: python scripts/run_ranking.py --data-dir ~/recsys-data --output artifacts/ranking.md
 """
@@ -94,7 +95,7 @@ def main() -> None:
     assert_no_time_leakage(split)
 
     retrievers = fit_retrievers(config, data, split.train, "train")
-    # Before the test window a deployed system would refit on everything seen so far, so the
+    # Before the test window a deployed system would refit on the history it has, so the
     # test stage uses retrievers fit on train plus validation. The ranker still trains on
     # candidates from the train-only retrievers, which were equally fresh for the validation window.
     test_history = pd.concat([split.train, split.val])

@@ -1,8 +1,9 @@
 # Simulated online experiment (M4)
 
 This document describes a simulated A/B test of the M3 ranker against the strongest M1 baseline.
-`make ranking` then `make experiment` regenerate every number in it. The raw output is written to
-`artifacts/experiment.md`.
+`make ranking` then `make experiment` regenerate the tables in it. The raw output is written to
+`artifacts/experiment.md`. A few derived figures (the sample size at the full-population effect,
+the standard error, and the first-pass numbers) were computed separately.
 
 ## Question
 
@@ -36,7 +37,8 @@ The baseline comes from the validation window, using the control fit on train: t
 
 The number of users is the head count of the test window, which is not an outcome. With 4,447
 users per arm, the minimum detectable effect is 0.0165 absolute, or 22% relative lift, at 80%
-power. A true lift smaller than that would usually go undetected here. The control scored 0.0814
+power. Smaller true lifts are detected less often: at this sample size power is about 50% for a
+15% relative lift, so lifts at or below that would usually go undetected. The control scored 0.0814
 on the test window, close to the 0.0757 the plan assumed.
 
 ## Result
@@ -70,9 +72,9 @@ the experiment was sized to detect.
 ## What went wrong on the first pass
 
 The first version of this experiment used a control that was fit on train only. Its 90-day window
-ended about two years before the test window, so it recommended items that were no longer
+ended about 19 months before the test window, so it recommended items that were no longer
 popular. Against that stale control the ranker appeared to double the hit rate (+111%, p = 5e-17).
-Refitting the control on train plus validation, as a real system would, brought the control from
+Refitting the control on train plus validation, which gives the control the same history the ranker's features use, brought the control from
 0.0373 to 0.0814 and the effect down to the figures above. The ranking stage had the same flaw
 and now refits all retrievers before the test window (see RESULTS.md). The lesson for a real
 experiment is to compare against the baseline as it would actually be deployed.
@@ -88,13 +90,21 @@ way.
 - Both outcomes exist for every user, so the only randomness in the simulation comes from who is
   assigned to which arm. The reported intervals use the standard formula that treats users as
   independent draws. They are somewhat wider than the assignment noise alone (standard error
-  0.0060 against a standard deviation of 0.0052 over repeated assignments), because each user's
-  outcomes under the two recommenders are correlated. A live test would add real behavioural
+  0.0060 against a standard deviation of 0.0052 over repeated assignments), because the formula
+  treats the arms as independent draws from an endless population, while the replay assigns a
+  fixed set of users. A live test would add real behavioural
   variation that this simulation does not contain.
 - The offline result has no new information beyond M3. The hit rate here is a different summary
   of the same recommendations behind the M3 ndcg and recall figures. What this stage adds is the
   procedure: a power calculation done before looking, a mismatch check, an A/A calibration, and
   intervals on the effect size.
+- The ranker is trained on candidates from retrievers fit on train and applied to candidates
+  from retrievers refit on train plus validation. Score features such as the ALS and two-tower
+  scores come from different fits and have no shared scale, and day counts such as item age shift
+  with the history. This is not leakage and the shift is modest for ALS (median top-100 score
+  0.257 against 0.273), but it most likely works against the ranker.
+- The refit history is train plus the validation rows of warm users and items, about half of all
+  validation rows.
 - Interference is absent by construction. In a live system users could influence each other
   through shared inventory, ratings or popularity counts.
 - The ranker is trained on the validation window and scored on the test window. A live system

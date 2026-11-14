@@ -124,8 +124,8 @@ Protocol:
 3. Label a candidate 1 when the user interacted with it in the validation window. Train the
    LightGBM LambdaMART ranker on these rows. 20% of validation users are held out to stop
    boosting early (49 trees were used). The split is by user.
-4. Refit every retriever on train plus validation, as a deployed system would do before serving
-   the test window. Build candidates (425 per user) and features from train plus validation
+4. Refit every retriever on train plus validation (the warm validation rows, about half of all
+   validation rows) before serving the test window. Build candidates (425 per user) and features from train plus validation
    history and score them with the ranker. The ranker is not refit, and the test window is not
    touched before this step.
 
@@ -149,7 +149,7 @@ ones to trust.
   item ids first, and it scored ndcg@10 0.0119 from that alone. Candidates are now shuffled within
   each user with a fixed seed.
 - The test-window retrievers were fit on train only, so recent popularity looked at the last 90
-  days of train, which ended about two years before the test window. The ranker's features used
+  days of train, which ended about 19 months before the test window. The ranker's features used
   train plus validation, so the baseline was staler than the ranker's inputs. The M1 and M2 test
   rows have the same flaw. Retrievers are now
   refit on train plus validation for the test window. This lifts recent popularity recall@100
@@ -204,4 +204,6 @@ Observations:
   directly, for example by dropping that one score.
 - Single seed and a single split, no confidence intervals. Differences below about 0.003 in
   ndcg@10 should not be read as real. The ranker is trained on one validation window and applied
-  one window later.
+  one window later. It is also trained on scores from retrievers fit on train and applied to
+  scores from retrievers refit on train plus validation, so score and age features shift between
+  training and test. This is not leakage and most likely works against the ranker.
