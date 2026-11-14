@@ -88,7 +88,7 @@ way.
 - Both outcomes exist for every user, so the only randomness in the simulation comes from who is
   assigned to which arm. The reported intervals use the standard formula that treats users as
   independent draws. They are somewhat wider than the assignment noise alone (standard error
-  0.0049 against a standard deviation of 0.0042 over repeated assignments), because each user's
+  0.0060 against a standard deviation of 0.0052 over repeated assignments), because each user's
   outcomes under the two recommenders are correlated. A live test would add real behavioural
   variation that this simulation does not contain.
 - The offline result has no new information beyond M3. The hit rate here is a different summary
