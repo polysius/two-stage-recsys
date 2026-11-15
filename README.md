@@ -49,7 +49,7 @@ src/recsys/retrieval/      ALS, two-tower and FAISS candidate generation
 src/recsys/ranking/        merged candidates, ranking features, LightGBM LambdaMART
 src/recsys/experiment.py   simulated A/B experiment, power analysis and statistics
 src/recsys/serving/        serving bundle, Redis candidate cache, recommender and FastAPI app
-scripts/                   data download, baseline, retrieval, ranking and experiment runs, retrieval tuning
+scripts/                   data download, baseline, retrieval, ranking and experiment runs, retrieval tuning, serving bundle build and benchmark
 tests/                     unit tests on a small synthetic log
 ```
 
