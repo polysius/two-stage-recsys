@@ -169,3 +169,37 @@ def test_bundle_config_is_the_default_yaml_shape():
     config = yaml.safe_load(Path("configs/default.yaml").read_text())
 
     assert {"cache_hit", "cache_miss", "cold_start"} <= set(config["serving"]["latency_budget_ms"])
+
+
+def test_cache_stays_out_of_the_way_after_a_redis_failure(serving_setup):
+    bundle, _ = serving_setup
+
+    class CountingBrokenRedis:
+        calls = 0
+
+        def get(self, key):
+            self.calls += 1
+            raise redis.TimeoutError("slow")
+
+        def set(self, key, value, ex=None):
+            self.calls += 1
+            raise redis.TimeoutError("slow")
+
+    broken = CountingBrokenRedis()
+    client = _client(bundle, _redis_cache(bundle, broken))
+
+    for user in (1, 2, 3):
+        assert client.get("/recommend", params={"user_id": user}).status_code == 200
+
+    assert broken.calls == 1  # the first failed lookup paused the cache, later requests skip Redis
+
+
+def test_a_malformed_cache_value_is_a_miss_not_an_error(serving_setup):
+    bundle, _ = serving_setup
+    fake = fakeredis.FakeRedis()
+    cache = _redis_cache(bundle, fake)
+    fake.set(f"candidates:{bundle.version}:5", b"not float32 rows")
+
+    body = _client(bundle, cache).get("/recommend", params={"user_id": 5}).json()
+
+    assert body["cache"] == "miss" and len(body["items"]) == 10

@@ -30,14 +30,17 @@ REDIS_PORT = 6390
 SERVER_PORT = 8765
 
 
-def wait_until_healthy(client: httpx.Client, timeout_seconds: float) -> None:
+def wait_until_healthy(client: httpx.Client, server: subprocess.Popen, timeout_seconds: float):
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
+        if server.poll() is not None:
+            raise RuntimeError(f"the service exited with code {server.returncode}")
         try:
             if client.get("/health").status_code == 200:
                 return
         except httpx.TransportError:
-            time.sleep(0.5)
+            pass
+        time.sleep(0.5)
     raise TimeoutError("the service did not become healthy")
 
 
@@ -97,7 +100,7 @@ def main() -> None:
     try:
         base_url = f"http://localhost:{SERVER_PORT}"
         with httpx.Client(base_url=base_url, timeout=10) as client:
-            wait_until_healthy(client, timeout_seconds=180)
+            wait_until_healthy(client, server, timeout_seconds=180)
             run_scenario(client, warmup_users, args.k, "ranked", "miss")  # warm code paths
             run_scenario(client, unknown_users[:20], args.k, "cold_start", "off")
 

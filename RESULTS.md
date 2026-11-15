@@ -222,9 +222,15 @@ Design:
   validation window (as in M3), and precomputed user and item statistics, so a request never
   reads the interaction log.
 - Redis caches each user's merged candidate list (items plus retriever ranks and scores, about
-  14 KB per user) for an hour. A hit skips retrieval. Ranking still runs on every request because
-  it is cheap and uses fresh statistics. The key includes the bundle version.
-- If Redis is down or slow (100 ms timeout), the request is treated as a miss and still answers.
+  14 KB per user) for an hour. A hit skips retrieval. Ranking still runs on every request, which
+  keeps the cached payload small and independent of k. The statistics come from the bundle and
+  do not change between builds, so a hit ranks to the same list the miss produced. The key
+  includes the bundle version.
+- If Redis fails or times out (100 ms per call), the request is treated as a miss and still
+  answers, and the cache is skipped for the next 5 seconds. A miss makes two Redis calls, so
+  against an unreachable Redis the first request can pay about 200 ms extra, which on a miss is
+  enough to exceed the 250 ms budget. After the first failure the cost is gone until the retry.
+  A malformed cache value is also treated as a miss.
 
 Latency budgets were set before measuring: p95 of 50 ms on a cache hit, 250 ms on a miss and 25 ms
 for cold start. Requests go over HTTP to one uvicorn worker, one at a time, from the same
@@ -242,17 +248,21 @@ Observations:
 - All three budgets are met with a wide margin. A hit is about 3.5 times faster than a miss at
   the median (6.4 ms against 22.4 ms). The remaining 6 ms on a hit is ranking and HTTP.
 - With 8 clients at once, one worker serves about 85 requests per second and p95 rises to 117 ms,
-  because requests queue behind the CPU-bound ranking in one Python process. No budget was set for
-  this case. More workers would help, but this was not measured. The load generator is also Python
-  threads in one process, so treat the concurrent row as indicative.
+  No budget was set for this case. Throughput is below the 155 requests per second that the 6.4 ms
+  sequential median implies. Contention for the Python interpreter lock in the single worker is a
+  likely cause, but it was not diagnosed, and more workers were not tried. The load generator is also
+  Python threads in one process, so treat the concurrent row as indicative. Concurrent cache misses
+  were not benchmarked.
 - Cold start is a single array lookup, so it is the cheapest path. Its quality was not evaluated:
   the M1 evaluation removed cold users, and recent popularity is not personalised.
 
 Limits:
 
-- Cached candidates can be up to an hour old. A user's new interactions do not change their list
-  until it expires, and an item they just consumed can reappear because the seen mask is applied
-  when candidates are built. A production system would invalidate the entry on a new interaction.
+- Nothing updates between bundle builds. The seen mask, retrievers and statistics are fixed in
+  the bundle, so a user's new interactions do not change their list until the next rebuild, and an
+  item they just consumed can be recommended again. The cache only repeats the same list, and
+  its keys carry the bundle version, so a rebuild starts with an empty cache. A system fed by
+  live interactions would need to invalidate entries.
 - User ids are the dense integers used in training. A real service needs a mapping from external
   ids, and ids that are missing from it would fall into the cold-start path.
 - One run on one machine. The bundle is a snapshot, so new interactions and new items need a rebuild.
