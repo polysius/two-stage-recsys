@@ -207,3 +207,52 @@ Observations:
   one window later. It is also trained on scores from retrievers fit on train and applied to
   scores from retrievers refit on train plus validation, so score and age features shift between
   training and test. This is not leakage and most likely works against the ranker.
+
+## M5: serving
+
+`GET /recommend?user_id=<id>&k=<n>` retrieves candidates from the five retrievers, ranks them with
+the M3 ranker and returns the top k. `GET /health` reports the bundle version. Users with no
+history get the recent-popularity ranking (`source: "cold_start"`, scores null) instead of an
+error. `make bundle` trains everything and saves one file (about 150 MB, about 15 minutes),
+`make serve` starts the service, and `make benchmark` produces the table below.
+
+Design:
+
+- The bundle holds the retrievers fit on train plus validation, the ranker trained on the
+  validation window (as in M3), and precomputed user and item statistics, so a request never
+  reads the interaction log.
+- Redis caches each user's merged candidate list (items plus retriever ranks and scores, about
+  14 KB per user) for an hour. A hit skips retrieval. Ranking still runs on every request because
+  it is cheap and uses fresh statistics. The key includes the bundle version.
+- If Redis is down or slow (100 ms timeout), the request is treated as a miss and still answers.
+
+Latency budgets were set before measuring: p95 of 50 ms on a cache hit, 250 ms on a miss and 25 ms
+for cold start. Requests go over HTTP to one uvicorn worker, one at a time, from the same
+machine (8 cores, WSL), 500 users per scenario:
+
+| scenario | requests | p50 ms | p95 ms | p99 ms | p95 budget ms | budget met |
+|:--|--:|--:|--:|--:|--:|:--|
+| cache miss | 500 | 22.4 | 27.3 | 33.5 | 250 | yes |
+| cache hit | 500 | 6.4 | 8.3 | 9.9 | 50 | yes |
+| cold start | 500 | 1.3 | 2.0 | 2.6 | 25 | yes |
+| cache hit, 8 concurrent clients | 500 | 88.6 | 117.2 | 142.5 | none | |
+
+Observations:
+
+- All three budgets are met with a wide margin. A hit is about 3.5 times faster than a miss at
+  the median (6.4 ms against 22.4 ms). The remaining 6 ms on a hit is ranking and HTTP.
+- With 8 clients at once, one worker serves about 85 requests per second and p95 rises to 117 ms,
+  because requests queue behind the CPU-bound ranking in one Python process. No budget was set for
+  this case. More workers would help, but this was not measured. The load generator is also Python
+  threads in one process, so treat the concurrent row as indicative.
+- Cold start is a single array lookup, so it is the cheapest path. Its quality was not evaluated:
+  the M1 evaluation removed cold users, and recent popularity is not personalised.
+
+Limits:
+
+- Cached candidates can be up to an hour old. A user's new interactions do not change their list
+  until it expires, and an item they just consumed can reappear because the seen mask is applied
+  when candidates are built. A production system would invalidate the entry on a new interaction.
+- User ids are the dense integers used in training. A real service needs a mapping from external
+  ids, and ids that are missing from it would fall into the cold-start path.
+- One run on one machine. The bundle is a snapshot, so new interactions and new items need a rebuild.

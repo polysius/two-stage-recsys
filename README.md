@@ -14,7 +14,7 @@ Dataset: Amazon Reviews 2023, Video Games 5-core ratings.
 | M2 candidate generation (ALS, two-tower, FAISS) | done, see [RESULTS.md](RESULTS.md) |
 | M3 ranking (LightGBM LambdaMART) | done, see [RESULTS.md](RESULTS.md) |
 | M4 simulated A/B experiment | done, see [EXPERIMENT.md](EXPERIMENT.md) |
-| M5 serving (FastAPI, Redis) | planned |
+| M5 serving (FastAPI, Redis) | done, see [RESULTS.md](RESULTS.md) |
 
 ## Setup
 
@@ -29,6 +29,9 @@ make baselines DATA_DIR=~/recsys-data
 make retrieval DATA_DIR=~/recsys-data
 make ranking DATA_DIR=~/recsys-data
 make experiment DATA_DIR=~/recsys-data   # needs the output of make ranking
+make bundle DATA_DIR=~/recsys-data       # trains and saves everything the service needs
+make serve                               # service on port 8000; set REDIS_URL to enable caching
+make benchmark                           # latency table, starts its own Redis (needs redis-server)
 ```
 
 `make data` downloads the ratings file, checks it against the pinned SHA-256 (deleting the file on a
@@ -45,6 +48,7 @@ src/recsys/evaluation.py   score any recommender on a split
 src/recsys/retrieval/      ALS, two-tower and FAISS candidate generation
 src/recsys/ranking/        merged candidates, ranking features, LightGBM LambdaMART
 src/recsys/experiment.py   simulated A/B experiment, power analysis and statistics
+src/recsys/serving/        serving bundle, Redis candidate cache, recommender and FastAPI app
 scripts/                   data download, baseline, retrieval, ranking and experiment runs, retrieval tuning
 tests/                     unit tests on a small synthetic log
 ```
