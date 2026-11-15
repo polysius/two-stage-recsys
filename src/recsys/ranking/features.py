@@ -33,32 +33,39 @@ def feature_columns(frame: pd.DataFrame, groups: list[str] | None = None) -> lis
     ]
 
 
-def build_features(candidates: pd.DataFrame, history: pd.DataFrame) -> pd.DataFrame:
+def item_statistics(history: pd.DataFrame) -> pd.DataFrame:
+    """One row per item with its popularity, rating and recency, measured on `history`."""
     reference_time = history["timestamp"].max()
-
-    def days_ago(timestamps: pd.Series) -> pd.Series:
-        return (reference_time - timestamps) / MS_PER_DAY
-
-    item_count = history.groupby("item_id").size()
     recent = history[history["timestamp"] >= reference_time - RECENT_WINDOW_DAYS * MS_PER_DAY]
+    by_item = history.groupby("item_id")
     items = pd.DataFrame({
-        "item_log_count": np.log1p(item_count),
+        "item_log_count": np.log1p(by_item.size()),
         "item_log_recent_count": np.log1p(recent.groupby("item_id").size()),
-        "item_mean_rating": history.groupby("item_id")["rating"].mean(),
-        "item_age_days": days_ago(history.groupby("item_id")["timestamp"].min()),
-        "item_days_since_last": days_ago(history.groupby("item_id")["timestamp"].max()),
+        "item_mean_rating": by_item["rating"].mean(),
+        "item_age_days": (reference_time - by_item["timestamp"].min()) / MS_PER_DAY,
+        "item_days_since_last": (reference_time - by_item["timestamp"].max()) / MS_PER_DAY,
     })
     items["item_log_recent_count"] = items["item_log_recent_count"].fillna(0.0)
+    return items
 
+
+def user_statistics(history: pd.DataFrame) -> pd.DataFrame:
+    """One row per user with their activity level, ratings and taste for popular items."""
+    reference_time = history["timestamp"].max()
+    item_count = history.groupby("item_id").size()
     by_user = history.assign(log_popularity=np.log1p(history["item_id"].map(item_count)))
     by_user = by_user.groupby("user_id")
-    users = pd.DataFrame({
+    return pd.DataFrame({
         "user_log_count": np.log1p(by_user.size()),
         "user_mean_rating": by_user["rating"].mean(),
-        "user_days_since_last": days_ago(by_user["timestamp"].max()),
+        "user_days_since_last": (reference_time - by_user["timestamp"].max()) / MS_PER_DAY,
         "user_mean_log_item_count": by_user["log_popularity"].mean(),
     })
 
+
+def join_features(
+    candidates: pd.DataFrame, users: pd.DataFrame, items: pd.DataFrame
+) -> pd.DataFrame:
     features = candidates.join(users, on="user_id").join(items, on="item_id")
     # Pair features compare the item with what this user usually consumes.
     features["pair_popularity_gap"] = (
@@ -66,3 +73,7 @@ def build_features(candidates: pd.DataFrame, history: pd.DataFrame) -> pd.DataFr
     )
     features["pair_rating_gap"] = features["item_mean_rating"] - features["user_mean_rating"]
     return features
+
+
+def build_features(candidates: pd.DataFrame, history: pd.DataFrame) -> pd.DataFrame:
+    return join_features(candidates, user_statistics(history), item_statistics(history))

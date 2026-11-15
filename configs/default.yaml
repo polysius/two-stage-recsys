@@ -40,3 +40,9 @@ experiment:
   n_repeats: 1000
   seed: 0
   planning_relative_lifts: [0.1, 0.2, 0.3, 0.5]
+serving:
+  cache_ttl_seconds: 3600
+  latency_budget_ms:        # p95 per request type, measured end to end through HTTP
+    cache_hit: 50
+    cache_miss: 250
+    cold_start: 25

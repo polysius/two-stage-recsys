@@ -20,6 +20,16 @@ class EmbeddingRetriever:
         self.index = faiss.IndexFlatIP(item_vectors.shape[1])
         self.index.add(self.item_vectors)
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state["index"]  # a FAISS index does not pickle; it is rebuilt from the item vectors
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.index = faiss.IndexFlatIP(self.item_vectors.shape[1])
+        self.index.add(self.item_vectors)
+
     def recommend(self, users: np.ndarray, k: int, seen: sp.csr_matrix) -> np.ndarray:
         """Top-k items per user, skipping items in `seen`.
 

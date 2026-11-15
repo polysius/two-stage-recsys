@@ -12,7 +12,6 @@ Usage: python scripts/run_ranking.py --data-dir ~/recsys-data --output artifacts
 """
 
 import argparse
-import time
 from pathlib import Path
 
 import numpy as np
@@ -23,26 +22,12 @@ from recsys.baselines import build_user_item_matrix
 from recsys.data import load_interactions
 from recsys.evaluation import relevant_items_by_user, score_recommender
 from recsys.metrics import evaluate
-from recsys.ranking.candidates import generate_candidates, label_candidates
-from recsys.ranking.features import GROUPS, build_features, feature_columns
+from recsys.ranking.features import GROUPS, feature_columns
+from recsys.ranking.pipeline import build_stage, fit_retrievers
 from recsys.ranking.ranker import top_k_per_user, train_ranker
-from recsys.retrieval.registry import build_retrievers
 from recsys.split import assert_no_time_leakage, time_split
 
 REPORT_METRICS = ["recall@10", "ndcg@10", "mrr", "recall@100"]
-
-
-def build_stage(retrievers, history, eval_table, data, per_retriever):
-    """Candidates, features and labels for every user who has interactions in `eval_table`."""
-    users = np.array(sorted(relevant_items_by_user(eval_table)))
-    seen = build_user_item_matrix(history, data.n_users, data.n_items)
-    candidates = generate_candidates(retrievers, users, seen, per_retriever)
-    features = build_features(candidates, history)
-    labels = label_candidates(candidates, eval_table)
-    n_relevant = len(eval_table[["user_id", "item_id"]].drop_duplicates())
-    print(f"{len(users)} users, {len(features)} candidates, "
-          f"candidate recall {labels.sum() / n_relevant:.4f}", flush=True)
-    return features, labels, users, labels.sum() / n_relevant, len(features) / len(users)
 
 
 def score_ranker(ranker, columns, features, users, history, eval_table, data, k_values):
@@ -51,15 +36,6 @@ def score_ranker(ranker, columns, features, users, history, eval_table, data, k_
     relevant = relevant_items_by_user(eval_table)
     popularity = np.bincount(history["item_id"], minlength=data.n_items).astype(float)
     return evaluate(recommended, [relevant[u] for u in users], popularity, k_values)
-
-
-def fit_retrievers(config, data, table, label):
-    retrievers = build_retrievers(config, data.n_users, data.n_items)
-    for name, retriever in retrievers.items():
-        started = time.perf_counter()
-        retriever.fit(table)
-        print(f"fitted {name} on {label} in {time.perf_counter() - started:.0f}s", flush=True)
-    return retrievers
 
 
 def save_test_recommendations(
@@ -94,17 +70,19 @@ def main() -> None:
     split = time_split(data.table, config["split"]["val_fraction"], config["split"]["test_fraction"])
     assert_no_time_leakage(split)
 
-    retrievers = fit_retrievers(config, data, split.train, "train")
+    retrievers = fit_retrievers(config, data.n_users, data.n_items, split.train, "train")
     # Before the test window a deployed system would refit on the history it has, so the
     # test stage uses retrievers fit on train plus validation. The ranker still trains on
     # candidates from the train-only retrievers, which were equally fresh for the validation window.
     test_history = pd.concat([split.train, split.val])
-    test_retrievers = fit_retrievers(config, data, test_history, "train + validation")
+    test_retrievers = fit_retrievers(
+        config, data.n_users, data.n_items, test_history, "train + validation"
+    )
     train_x, train_y, _, val_recall, val_per_user = build_stage(
-        retrievers, split.train, split.val, data, ranking["candidates_per_retriever"]
+        retrievers, split.train, split.val, data.n_users, data.n_items, ranking["candidates_per_retriever"]
     )
     test_x, _, test_users, test_recall, test_per_user = build_stage(
-        test_retrievers, test_history, split.test, data, ranking["candidates_per_retriever"]
+        test_retrievers, test_history, split.test, data.n_users, data.n_items, ranking["candidates_per_retriever"]
     )
 
     def fit_and_score(groups):
