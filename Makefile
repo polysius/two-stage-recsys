@@ -1,7 +1,7 @@
 # Needs a Rust toolchain (rustup). The project has no C or C++ dependencies. On the ARM64 Windows
 # machine it was developed on, the MSVC linker is missing, so it is built and run inside WSL.
 DATA_DIR ?= data
-RECSYS = target/release/recsys --data-dir $(DATA_DIR)
+RECSYS = target/release/recsys
 
 .PHONY: build data test lint baselines retrieval ranking experiment bundle serve benchmark
 
@@ -19,19 +19,19 @@ lint:
 	cargo fmt --check
 
 baselines: build
-	$(RECSYS) baselines --output artifacts/baselines.md
+	$(RECSYS) baselines --data-dir $(DATA_DIR) --output artifacts/baselines.md
 
 retrieval: build
-	$(RECSYS) retrieval --output artifacts/retrieval.md
+	$(RECSYS) retrieval --data-dir $(DATA_DIR) --output artifacts/retrieval.md
 
 ranking: build
-	$(RECSYS) ranking --output artifacts/ranking.md
+	$(RECSYS) ranking --data-dir $(DATA_DIR) --output artifacts/ranking.md
 
 experiment: build
-	$(RECSYS) experiment --output artifacts/experiment.md   # needs the output of make ranking
+	$(RECSYS) experiment --data-dir $(DATA_DIR) --output artifacts/experiment.md   # needs the output of make ranking
 
 bundle: build
-	$(RECSYS) bundle --output artifacts/serving_bundle.bin  # trains and saves everything the service needs
+	$(RECSYS) bundle --data-dir $(DATA_DIR) --output artifacts/serving_bundle.bin  # trains and saves everything the service needs
 
 serve: build
 	BUNDLE_PATH=artifacts/serving_bundle.bin target/release/recsys serve --port 8000   # set REDIS_URL to enable caching
