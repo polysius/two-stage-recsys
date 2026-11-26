@@ -1,35 +1,40 @@
-# Run inside WSL/Linux. LightGBM and implicit do not install on native ARM64 Windows.
-PYTHON ?= python
+# Needs a Rust toolchain (rustup). The project has no C or C++ dependencies. On the ARM64 Windows
+# machine it was developed on, the MSVC linker is missing, so it is built and run inside WSL.
 DATA_DIR ?= data
+RECSYS = target/release/recsys --data-dir $(DATA_DIR)
 
-.PHONY: data test lint baselines retrieval ranking experiment bundle serve benchmark
+.PHONY: build data test lint baselines retrieval ranking experiment bundle serve benchmark
 
-data:
-	$(PYTHON) scripts/download_data.py --data-dir $(DATA_DIR)
+build:
+	cargo build --release
+
+data: build
+	target/release/recsys download-data --data-dir $(DATA_DIR)
 
 test:
-	$(PYTHON) -m pytest
+	cargo test --release
 
 lint:
-	ruff check .
+	cargo clippy --release --all-targets -- -D warnings
+	cargo fmt --check
 
-baselines:
-	PYTHONPATH=src $(PYTHON) scripts/run_baselines.py --data-dir $(DATA_DIR) --output artifacts/baselines.md
+baselines: build
+	$(RECSYS) baselines --output artifacts/baselines.md
 
-retrieval:
-	PYTHONPATH=src $(PYTHON) scripts/run_retrieval.py --data-dir $(DATA_DIR) --output artifacts/retrieval.md
+retrieval: build
+	$(RECSYS) retrieval --output artifacts/retrieval.md
 
-ranking:
-	PYTHONPATH=src $(PYTHON) scripts/run_ranking.py --data-dir $(DATA_DIR) --output artifacts/ranking.md
+ranking: build
+	$(RECSYS) ranking --output artifacts/ranking.md
 
-experiment:
-	PYTHONPATH=src $(PYTHON) scripts/run_experiment.py --data-dir $(DATA_DIR) --output artifacts/experiment.md
+experiment: build
+	$(RECSYS) experiment --output artifacts/experiment.md   # needs the output of make ranking
 
-bundle:
-	PYTHONPATH=src $(PYTHON) scripts/build_serving_bundle.py --data-dir $(DATA_DIR) --output artifacts/serving_bundle.joblib
+bundle: build
+	$(RECSYS) bundle --output artifacts/serving_bundle.bin  # trains and saves everything the service needs
 
-serve:
-	PYTHONPATH=src BUNDLE_PATH=artifacts/serving_bundle.joblib $(PYTHON) -m uvicorn recsys.serving.api:create_app_from_env --factory --port 8000
+serve: build
+	BUNDLE_PATH=artifacts/serving_bundle.bin target/release/recsys serve --port 8000   # set REDIS_URL to enable caching
 
-benchmark:
-	PYTHONPATH=src $(PYTHON) scripts/benchmark_serving.py --output artifacts/serving.md
+benchmark: build
+	target/release/recsys benchmark --output artifacts/serving.md   # starts its own Redis (needs redis-server)
